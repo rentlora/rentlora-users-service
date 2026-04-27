@@ -57,7 +57,7 @@ jobs:
         run: python -m compileall src
 
       - name: SonarCloud scan
-        if: env.SONAR_TOKEN != ''
+        if: env.SONAR_TOKEN != '' && (github.ref == 'refs/heads/main' || github.event_name == 'pull_request')
         uses: SonarSource/sonarcloud-github-action@master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -65,7 +65,7 @@ jobs:
           SONAR_HOST_URL: https://sonarcloud.io
 
       - name: SonarCloud quality gate
-        if: env.SONAR_TOKEN != ''
+        if: env.SONAR_TOKEN != '' && (github.ref == 'refs/heads/main' || github.event_name == 'pull_request')
         uses: sonarsource/sonarqube-quality-gate-action@master
         timeout-minutes: 5
         env:
