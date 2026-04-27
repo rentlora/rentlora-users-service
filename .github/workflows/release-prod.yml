@@ -178,13 +178,14 @@ jobs:
     needs:
       - notify-release-pending
       - release-prod
-    if: always() && contains(needs.*.result, 'failure') && secrets.SLACK_WEBHOOK_URL != ''
+    if: always() && contains(needs.*.result, 'failure')
 
     steps:
       - name: Checkout service repo
         uses: actions/checkout@v4
 
       - name: Notify failed run
+        if: env.SLACK_WEBHOOK_URL != ''
         uses: ./.github/actions/slack-notify
         with:
           status: failed
