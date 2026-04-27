@@ -55,18 +55,21 @@ jobs:
       - name: Python compile check
         run: python -m compileall src
 
-      - name: SonarQube scan
+      - name: SonarCloud scan
         if: env.SONAR_TOKEN != ''
-        uses: SonarSource/sonarqube-scan-action@v7.1.0
+        uses: SonarSource/sonarcloud-github-action@master
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ env.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
 
-      - name: SonarQube quality gate
+      - name: SonarCloud quality gate
         if: env.SONAR_TOKEN != ''
         uses: sonarsource/sonarqube-quality-gate-action@master
         timeout-minutes: 5
         env:
           SONAR_TOKEN: ${{ env.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
 
       - name: Snyk dependency scan
         if: env.SNYK_TOKEN != ''
