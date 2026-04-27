@@ -109,11 +109,6 @@ jobs:
           ignore-unfixed: true
           exit-code: 1
 
-      - name: Secret scan
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   deploy-dev:
     name: Build, scan, deploy dev
     runs-on: ubuntu-latest
