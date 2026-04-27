@@ -178,7 +178,7 @@ jobs:
     needs:
       - notify-release-pending
       - release-prod
-    if: always() && contains(needs.*.result, 'failure') && env.SLACK_WEBHOOK_URL != ''
+    if: always() && contains(needs.*.result, 'failure') && secrets.SLACK_WEBHOOK_URL != ''
 
     steps:
       - name: Checkout service repo
