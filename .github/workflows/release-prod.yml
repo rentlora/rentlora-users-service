@@ -53,10 +53,21 @@ jobs:
 
       - name: Validate release source branch
         run: |
-          if [ "${{ github.event.release.target_commitish }}" != "main" ]; then
-            echo "Release must target main. Current target: ${{ github.event.release.target_commitish }}"
-            exit 1
+          TARGET="${{ github.event.release.target_commitish }}"
+          git fetch origin main --depth=1
+
+          if [ "$TARGET" = "main" ]; then
+            echo "Release target is main."
+            exit 0
           fi
+
+          if git rev-parse --verify -q "${TARGET}^{commit}" >/dev/null && git merge-base --is-ancestor "${TARGET}^{commit}" origin/main; then
+            echo "Release target commit is contained in main."
+            exit 0
+          fi
+
+          echo "Release must target main (branch) or a commit already in main. Current target: $TARGET"
+          exit 1
 
       - name: Resolve source and target tags
         id: tags
