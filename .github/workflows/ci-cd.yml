@@ -33,6 +33,14 @@ jobs:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
     steps:
+      - name: Enforce develop-to-main PRs
+        if: github.event_name == 'pull_request' && github.base_ref == 'main'
+        run: |
+          if [ "${{ github.head_ref }}" != "develop" ]; then
+            echo "ERROR: You can only merge into main from the develop branch!"
+            exit 1
+          fi
+
       - name: Checkout service repo
         uses: actions/checkout@v4
         with:
@@ -202,6 +210,15 @@ jobs:
           git commit -m "ci(${SERVICE}): deploy ${IMAGE_TAG} to dev [skip ci]"
           git push origin main
 
+      - name: Slack Notification (Dev Deployment)
+        if: always() && env.SLACK_WEBHOOK_URL != ''
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ env.SLACK_WEBHOOK_URL }}
+          SLACK_COLOR: ${{ job.status == 'success' && 'good' || 'danger' }}
+          SLACK_TITLE: "Deployment to Dev: ${{ job.status }}"
+          SLACK_MESSAGE: "Service: ${{ env.SERVICE }}\nImage: ${{ env.IMAGE_TAG }}"
+
   release-prod:
     name: Build, scan, release prod
     runs-on: ubuntu-latest
@@ -290,3 +307,12 @@ jobs:
           git diff --staged --quiet && exit 0
           git commit -m "ci(${SERVICE}): release ${IMAGE_TAG} to prod [skip ci]"
           git push origin main
+
+      - name: Slack Notification (Prod Deployment)
+        if: always() && env.SLACK_WEBHOOK_URL != ''
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ env.SLACK_WEBHOOK_URL }}
+          SLACK_COLOR: ${{ job.status == 'success' && 'good' || 'danger' }}
+          SLACK_TITLE: "Deployment to Prod: ${{ job.status }}"
+          SLACK_MESSAGE: "Service: ${{ env.SERVICE }}\nImage: ${{ env.IMAGE_TAG }}"
