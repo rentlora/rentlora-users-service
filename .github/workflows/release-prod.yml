@@ -1,0 +1,198 @@
+name: Release Prod
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  SERVICE: rentlora-user-service
+  IMAGE_NAME: ghcr.io/rentlora/rentlora-user-service
+  HELM_REPO: rentlora/rentlora-helm
+  SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+jobs:
+  notify-release-pending:
+    name: Notify release awaiting approval
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout service repo
+        uses: actions/checkout@v4
+
+      - name: Notify release is waiting for production approval
+        if: env.SLACK_WEBHOOK_URL != ''
+        uses: ./.github/actions/slack-notify
+        with:
+          status: success
+          pipeline: Release Prod
+          job_name: release-awaiting
+          service_name: ${{ env.SERVICE }}
+          message: |
+            Release `${{ github.event.release.tag_name }}` started and is waiting for production approval.
+          slack_webhook_url: ${{ env.SLACK_WEBHOOK_URL }}
+          gmail_username: ${{ secrets.GMAIL_USERNAME }}
+          gmail_app_password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          notify_email_to: ${{ secrets.NOTIFY_EMAIL_TO }}
+
+  release-prod:
+    name: Promote image and open Helm PR
+    runs-on: ubuntu-latest
+    needs: notify-release-pending
+    environment:
+      name: production
+
+    steps:
+      - name: Checkout service repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate release source branch
+        run: |
+          if [ "${{ github.event.release.target_commitish }}" != "main" ]; then
+            echo "Release must target main. Current target: ${{ github.event.release.target_commitish }}"
+            exit 1
+          fi
+
+      - name: Resolve source and target tags
+        id: tags
+        run: |
+          IMAGE_TAG="${{ github.event.release.tag_name }}"
+          git fetch --tags --force
+          RELEASE_SHA="$(git rev-list -n 1 "refs/tags/${IMAGE_TAG}" || true)"
+          if [ -z "$RELEASE_SHA" ]; then
+            echo "Could not resolve release tag commit SHA for ${IMAGE_TAG}"
+            exit 1
+          fi
+          SHORT_SHA="${RELEASE_SHA:0:7}"
+          SOURCE_IMAGE_TAG="sha-${SHORT_SHA}"
+          echo "IMAGE_TAG=${IMAGE_TAG}" >> "$GITHUB_ENV"
+          echo "SOURCE_IMAGE_TAG=${SOURCE_IMAGE_TAG}" >> "$GITHUB_ENV"
+          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "source_image_tag=${SOURCE_IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull source image (release SHA)
+        id: pull-source
+        continue-on-error: true
+        run: docker pull "${IMAGE_NAME}:${SOURCE_IMAGE_TAG}"
+
+      - name: Resolve latest SHA image fallback
+        if: steps.pull-source.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GIT_TOKEN }}
+        run: |
+          LATEST_SHA_TAG="$(gh api "/orgs/rentlora/packages/container/${SERVICE}/versions?per_page=100" --jq '[.[].metadata.container.tags[]? | select(startswith("sha-"))][0]')"
+          if [ -z "$LATEST_SHA_TAG" ] || [ "$LATEST_SHA_TAG" = "null" ]; then
+            echo "No fallback sha-* image tag found in GHCR package versions."
+            exit 1
+          fi
+          echo "SOURCE_IMAGE_TAG=${LATEST_SHA_TAG}" >> "$GITHUB_ENV"
+          docker pull "${IMAGE_NAME}:${LATEST_SHA_TAG}"
+
+      - name: Retag and push release image
+        run: |
+          docker tag "${IMAGE_NAME}:${SOURCE_IMAGE_TAG}" "${IMAGE_NAME}:${IMAGE_TAG}"
+          docker push "${IMAGE_NAME}:${IMAGE_TAG}"
+
+      - name: Checkout Helm repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.HELM_REPO }}
+          token: ${{ secrets.GIT_TOKEN }}
+          path: _helm
+
+      - name: Install yq
+        uses: mikefarah/yq@v4
+
+      - name: Update prod Helm values in release branch
+        id: helm
+        run: |
+          FILE="${SERVICE}/values-prod.yaml"
+          BRANCH="release/${SERVICE}-${IMAGE_TAG}-${GITHUB_RUN_ID}"
+
+          yq e ".image.tag = \"${IMAGE_TAG}\"" -i "_helm/${FILE}"
+
+          cd _helm
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "${BRANCH}"
+          git add "${FILE}"
+          if git diff --staged --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "branch_name=${BRANCH}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git commit -m "release(${SERVICE}): ${IMAGE_TAG}"
+          git push origin "${BRANCH}"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "branch_name=${BRANCH}" >> "$GITHUB_OUTPUT"
+
+      - name: Create Helm PR
+        if: steps.helm.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GIT_TOKEN }}
+        run: |
+          gh pr create \
+            --repo "${HELM_REPO}" \
+            --base main \
+            --head "${{ steps.helm.outputs.branch_name }}" \
+            --title "release(${SERVICE}): ${IMAGE_TAG}" \
+            --body "Promote ${SERVICE} to ${IMAGE_TAG} for production."
+
+      - name: Notify prod release success
+        if: success() && env.SLACK_WEBHOOK_URL != ''
+        uses: ./.github/actions/slack-notify
+        with:
+          status: success
+          pipeline: Release Prod
+          job_name: release-prod
+          service_name: ${{ env.SERVICE }}
+          docker_image: ${{ env.IMAGE_NAME }}
+          docker_tag: ${{ env.IMAGE_TAG }}
+          message: |
+            Production release image was promoted (retagged, no rebuild).
+            Image: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+            Helm update was submitted as a PR in `${{ env.HELM_REPO }}`.
+          slack_webhook_url: ${{ env.SLACK_WEBHOOK_URL }}
+          gmail_username: ${{ secrets.GMAIL_USERNAME }}
+          gmail_app_password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          notify_email_to: ${{ secrets.NOTIFY_EMAIL_TO }}
+
+  notify-failure:
+    name: Notify prod release failure
+    runs-on: ubuntu-latest
+    needs:
+      - notify-release-pending
+      - release-prod
+    if: always() && contains(needs.*.result, 'failure') && env.SLACK_WEBHOOK_URL != ''
+
+    steps:
+      - name: Checkout service repo
+        uses: actions/checkout@v4
+
+      - name: Notify failed run
+        uses: ./.github/actions/slack-notify
+        with:
+          status: failed
+          pipeline: Release Prod
+          job_name: release-prod
+          service_name: ${{ env.SERVICE }}
+          error_message: Release promotion failed before completion.
+          slack_webhook_url: ${{ env.SLACK_WEBHOOK_URL }}
+          gmail_username: ${{ secrets.GMAIL_USERNAME }}
+          gmail_app_password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          notify_email_to: ${{ secrets.NOTIFY_EMAIL_TO }}
