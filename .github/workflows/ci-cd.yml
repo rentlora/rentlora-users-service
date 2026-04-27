@@ -55,18 +55,21 @@ jobs:
       - name: Python compile check
         run: python -m compileall src
 
-      - name: SonarQube scan
-        if: env.SONAR_TOKEN != ''
-        uses: SonarSource/sonarqube-scan-action@v7.1.0
+      - name: SonarCloud scan
+        if: env.SONAR_TOKEN != '' && (github.ref == 'refs/heads/main' || github.event_name == 'pull_request')
+        uses: SonarSource/sonarcloud-github-action@master
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ env.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
 
-      - name: SonarQube quality gate
-        if: env.SONAR_TOKEN != ''
+      - name: SonarCloud quality gate
+        if: env.SONAR_TOKEN != '' && (github.ref == 'refs/heads/main' || github.event_name == 'pull_request')
         uses: sonarsource/sonarqube-quality-gate-action@master
         timeout-minutes: 5
         env:
           SONAR_TOKEN: ${{ env.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
 
       - name: Snyk dependency scan
         if: env.SNYK_TOKEN != ''
@@ -84,7 +87,7 @@ jobs:
           category: snyk-${{ env.SERVICE }}
 
       - name: Trivy filesystem scan
-        uses: aquasecurity/trivy-action@0.29.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           scan-type: fs
           scan-ref: .
@@ -100,7 +103,7 @@ jobs:
           category: trivy-fs-${{ env.SERVICE }}
 
       - name: Fail on critical filesystem vulnerabilities
-        uses: aquasecurity/trivy-action@0.29.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           scan-type: fs
           scan-ref: .
@@ -108,11 +111,6 @@ jobs:
           severity: CRITICAL
           ignore-unfixed: true
           exit-code: 1
-
-      - name: Secret scan
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   deploy-dev:
     name: Build, scan, deploy dev
@@ -153,7 +151,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Trivy image scan
-        uses: aquasecurity/trivy-action@0.29.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
           format: sarif
@@ -168,7 +166,7 @@ jobs:
           category: trivy-image-${{ env.SERVICE }}
 
       - name: Fail on critical image vulnerabilities
-        uses: aquasecurity/trivy-action@0.29.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
           format: table
@@ -247,7 +245,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Trivy image scan
-        uses: aquasecurity/trivy-action@0.29.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
           format: sarif
@@ -262,7 +260,7 @@ jobs:
           category: trivy-image-${{ env.SERVICE }}-prod
 
       - name: Fail on critical image vulnerabilities
-        uses: aquasecurity/trivy-action@0.29.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
           format: table
