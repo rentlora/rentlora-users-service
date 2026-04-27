@@ -32,7 +32,7 @@ jobs:
           job_name: release-awaiting
           service_name: ${{ env.SERVICE }}
           message: |
-            Release `${{ github.event.release.tag_name }}` started and is waiting for production approval.
+            Release ${{ github.event.release.tag_name }} started and is waiting for production approval.
           slack_webhook_url: ${{ env.SLACK_WEBHOOK_URL }}
           gmail_username: ${{ secrets.GMAIL_USERNAME }}
           gmail_app_password: ${{ secrets.GMAIL_APP_PASSWORD }}

@@ -48,7 +48,14 @@ runs:
         STATUS="${{ inputs.status }}"
         JOB="${{ inputs.job_name }}"
         SERVICE="${{ inputs.service_name }}"
-        CUSTOM_MESSAGE="${{ inputs.message }}"
+        CUSTOM_MESSAGE="$(cat <<'EOF_CUSTOM_MESSAGE'
+        ${{ inputs.message }}
+        EOF_CUSTOM_MESSAGE
+        )"
+        ERROR_MESSAGE="$(cat <<'EOF_ERROR_MESSAGE'
+        ${{ inputs.error_message }}
+        EOF_ERROR_MESSAGE
+        )"
         SERVICE_LABEL="${SERVICE:+[$SERVICE] }"
 
         if [ "$STATUS" = "success" ]; then
@@ -78,7 +85,7 @@ runs:
             DETAIL="$LABEL completed successfully."
           fi
         else
-          DETAIL="${{ inputs.error_message }}"
+          DETAIL="$ERROR_MESSAGE"
         fi
 
         DETAIL_ESC="${DETAIL//$'\n'/\\n}"
