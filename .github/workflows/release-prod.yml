@@ -34,9 +34,6 @@ jobs:
           message: |
             Release ${{ github.event.release.tag_name }} started and is waiting for production approval.
           slack_webhook_url: ${{ env.SLACK_WEBHOOK_URL }}
-          gmail_username: ${{ secrets.GMAIL_USERNAME }}
-          gmail_app_password: ${{ secrets.GMAIL_APP_PASSWORD }}
-          notify_email_to: ${{ secrets.NOTIFY_EMAIL_TO }}
 
   release-prod:
     name: Promote image and open Helm PR
@@ -104,7 +101,7 @@ jobs:
       - name: Resolve latest SHA image fallback
         if: steps.pull-source.outcome == 'failure'
         env:
-          GH_TOKEN: ${{ secrets.GIT_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           LATEST_SHA_TAG="$(gh api "/orgs/rentlora/packages/container/${SERVICE}/versions?per_page=100" --jq '[.[].metadata.container.tags[]? | select(startswith("sha-"))][0]')"
           if [ -z "$LATEST_SHA_TAG" ] || [ "$LATEST_SHA_TAG" = "null" ]; then
@@ -179,9 +176,6 @@ jobs:
             Image: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
             Helm update was submitted as a PR in `${{ env.HELM_REPO }}`.
           slack_webhook_url: ${{ env.SLACK_WEBHOOK_URL }}
-          gmail_username: ${{ secrets.GMAIL_USERNAME }}
-          gmail_app_password: ${{ secrets.GMAIL_APP_PASSWORD }}
-          notify_email_to: ${{ secrets.NOTIFY_EMAIL_TO }}
 
   notify-failure:
     name: Notify prod release failure
@@ -205,6 +199,3 @@ jobs:
           service_name: ${{ env.SERVICE }}
           error_message: Release promotion failed before completion.
           slack_webhook_url: ${{ env.SLACK_WEBHOOK_URL }}
-          gmail_username: ${{ secrets.GMAIL_USERNAME }}
-          gmail_app_password: ${{ secrets.GMAIL_APP_PASSWORD }}
-          notify_email_to: ${{ secrets.NOTIFY_EMAIL_TO }}
