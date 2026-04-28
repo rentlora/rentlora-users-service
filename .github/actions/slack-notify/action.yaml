@@ -1,4 +1,4 @@
-name: Notify Slack and Gmail
+name: Notify Slack
 description: "Send deployment/pipeline notifications"
 
 inputs:
@@ -28,15 +28,6 @@ inputs:
     default: ""
   slack_webhook_url:
     required: true
-  gmail_username:
-    required: false
-    default: ""
-  gmail_app_password:
-    required: false
-    default: ""
-  notify_email_to:
-    required: false
-    default: ""
 
 runs:
   using: "composite"
@@ -128,26 +119,3 @@ runs:
       env:
         SLACK_WEBHOOK_URL: ${{ inputs.slack_webhook_url }}
         SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
-
-    - name: Send Gmail notification
-      if: inputs.gmail_username != '' && inputs.notify_email_to != ''
-      uses: dawidd6/action-send-mail@v3
-      with:
-        server_address: smtp.gmail.com
-        server_port: 465
-        secure: true
-        username: ${{ inputs.gmail_username }}
-        password: ${{ inputs.gmail_app_password }}
-        to: ${{ inputs.notify_email_to }}
-        from: "GitHub Actions <${{ inputs.gmail_username }}>"
-        subject: >
-          [${{ inputs.pipeline }}] ${{ steps.ctx.outputs.status_word }} - ${{ steps.ctx.outputs.job_label }}
-        body: |
-          Status     : ${{ steps.ctx.outputs.status_word }}
-          Job        : ${{ steps.ctx.outputs.job_label }}
-          Repository : ${{ github.repository }}
-          Ref        : ${{ github.ref_name }}
-          Run        : ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-
-          Details:
-          ${{ steps.ctx.outputs.detail }}
